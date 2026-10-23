@@ -1,0 +1,47 @@
+name: SFT data contracts
+
+on:
+  pull_request:
+    paths:
+      - 'scienceinfra/sft/**'
+      - 'tests/sft/**'
+      - 'pyproject.toml'
+      - '.github/workflows/sft-contracts.yml'
+  push:
+    branches: [main, 'codex/sft-trajectory-export']
+    paths:
+      - 'scienceinfra/sft/**'
+      - 'tests/sft/**'
+      - 'pyproject.toml'
+      - '.github/workflows/sft-contracts.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  offline-contracts:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      LITELLM_LOCAL_MODEL_COST_MAP: 'True'
+      HF_HUB_OFFLINE: '1'
+      OPENAI_API_KEY: ''
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install the tested harness and optional SFT dependencies
+        run: |
+          python -m pip install 'harbor @ git+https://github.com/harbor-framework/harbor.git@3c82380859d187957cfd5cd64802b076d9779550'
+          python -m pip install -e '.[sft]' ruff==0.15.6
+      - name: Lint and format
+        run: |
+          ruff check scienceinfra/sft tests/sft
+          ruff format --check scienceinfra/sft tests/sft
+      - name: Offline evidence and label contracts (no Docker or model calls)
+        run: python -m unittest discover -s tests/sft -p 'test_*.py' -v
+      - name: CLI smoke
+        run: |
+          python -m scienceinfra.sft.rollout --help
+          python -m scienceinfra.sft.tokenize_qwen --help
